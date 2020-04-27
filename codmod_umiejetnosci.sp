@@ -18,7 +18,8 @@ int umiejetnosc[MAXPLAYERS+1][MAX_SKILLI],
 	zatruty[MAXPLAYERS+1];
 float wieksze_obrazenia[MAXPLAYERS+1][MAX_WEAPONS+1],
 	przelicznik_int[MAXPLAYERS+1],
-	grawitacja_gracza[MAXPLAYERS+1];
+	grawitacja_gracza[MAXPLAYERS+1],
+	time_gracza[MAXPLAYERS+1];
 
 Handle odmrozenie[MAXPLAYERS+1],
 	zatrucie[MAXPLAYERS+1];
@@ -50,11 +51,6 @@ char modele_postaci[][] = {
 
 public OnPluginStart() {
 	CreateConVar(PLUGIN_NAME, PLUGIN_VERSION, PLUGIN_AUTHOR);
-
-	// Spis wydarzeń
-	//HookEvent("player_spawn", Odrodzenie);
-	HookEvent("player_death", SmiercGracza);
-	AddNormalSoundHook(CicheKroki);
 }
 
 public void OnMapStart() {
@@ -66,7 +62,15 @@ public void OnMapStart() {
 		SetFailState("Can't find m_hThrower offset");
 	}
 
+	// Spis wydarzeń
+	//HookEvent("player_spawn", Odrodzenie);
+	HookEvent("player_death", SmiercGracza);
 	HookEvent("smokegrenade_detonate", ZdetonowanyDymny);
+	HookEvent("bullet_impact", NieskonczonyMagazynek);
+	HookEvent("player_blind", PlayerBlind, EventHookMode_Pre);
+
+	// Ciche kroki
+	AddNormalSoundHook(CicheKroki);
 
 	for(new i = 0; i < sizeof(modele_postaci); i ++)
 		PrecacheModel(modele_postaci[i]);
@@ -93,6 +97,8 @@ public OnClientPutInServer(client) {
 	WyzerujZabojstwa(client);
 	WyzerujObrazenia(client);
 	WyzerujObrazeniaZInt(client);
+
+	time_gracza[client] = 0.0;
 }
 public OnClientDisconnect(client) {
 	SDKUnhook(client, SDKHook_OnTakeDamage, OnTakeDamage);
@@ -105,6 +111,10 @@ public OnClientDisconnect(client) {
 	if(odmrozenie[client] != null) {
 		KillTimer(odmrozenie[client]);
 		odmrozenie[client] = null;
+	}
+	if (zatrucie[client] != null) {
+		KillTimer(zatrucie[client]);
+		zatrucie[client] = null;
 	}
 }
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int errorLen) {
@@ -150,22 +160,41 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 
 		new flags = GetEntityFlags(client);
 
-		float eyeAngles[3];
-		GetClientEyeAngles(client, eyeAngles);
+		GetClientEyeAngles(client, angles);
 
 		if ((buttons & IN_JUMP) && !(flags & FL_ONGROUND) && !(lastButtons[client] & IN_JUMP) && jumps[client] > 0) {
 			jumps[client] --;
 
-			float velocity[3];
-			GetEntPropVector(client, Prop_Data, "m_vecVelocity", velocity);
-			velocity[2] = 320.0;
-			TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, velocity);
+			GetEntPropVector(client, Prop_Data, "m_vecVelocity", vel);
+			vel[2] = 320.0;
+			TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, vel);
 		} else if (flags & FL_ONGROUND) {
 			jumps[client] = 0;
 			if(umiejetnosc[client][multi_skok])
 				jumps[client] += umiejetnosc[client][multi_skok];
 		}
 		lastButtons[client] = buttons;
+	}
+	
+	if(umiejetnosc[client][dlugi_skok]) {
+		float gametime = GetGameTime();
+		if((buttons & IN_USE)) {
+			if(gametime > time_gracza[client]+4.0) {
+				int moc = umiejetnosc[client][dlugi_skok]+RoundFloat(cod_get_user_maks_intelligence(client)*4.0);
+				GetClientEyeAngles(client, angles);
+
+				angles[0] *= -1.0; 
+				angles[0] = DegToRad(angles[0]); 
+				angles[1] = DegToRad(angles[1]); 
+
+				vel[0] = Cosine(angles[0]) * Cosine(angles[1]) * moc;
+				vel[1] = Cosine(angles[0]) * Sine(angles[1]) * moc;
+				vel[2] = 265.0;
+
+				TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, vel);
+				time_gracza[client] = gametime;
+			}
+		}
 	}
 
 	if(umiejetnosc[client][niewidka])
@@ -265,11 +294,35 @@ public Action OnTakeDamage(int client, int &attacker, int &inflictor, float &dam
 		if ((damageType & DMG_BULLET) && GetRandomInt(1, umiejetnosc[attacker][trujace_pociski]) == 1)
 			Trucizna(client, attacker, 16, 0.1, 1.0, 0.025);
 	}
-	if(umiejetnosc[attacker][trujace_dymne]) {
-		if ((damageType & DMG_POISON) && GetRandomInt(1, umiejetnosc[attacker][trujace_dymne]) == 1)
-			Trucizna(client, attacker, 16, 0.1, 1.0, 0.025);
+
+	if(umiejetnosc[attacker][szybkostrzelnosc]) {
+		new active_weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+		if(!(csWeaponID == CSWeapon_KNIFE)) {
+			if(active_weapon != -1) {
+				float gametime = GetGameTime();
+				float fattack = GetEntDataFloat(active_weapon, FindSendPropInfo("CBaseCombatWeapon", "m_flNextPrimaryAttack"))-gametime;
+				SetEntDataFloat(active_weapon, FindSendPropInfo("CBaseCombatWeapon", "m_flNextPrimaryAttack"), (fattack/1.4)+gametime);
+			}
+		}
 	}
 
+	if(umiejetnosc[attacker][oslepienie]) {
+		if((damageType & DMG_BULLET) && GetRandomInt(1,umiejetnosc[attacker][oslepienie]) == 1) {
+			Fade(client, 750, 300, 0x0001, {255, 255, 255, 255});
+		}
+	}
+
+	return Plugin_Continue;
+}
+
+public Action PlayerBlind(Handle event, const char[] eventName, bool dontBroadcast) {
+	int client = GetClientOfUserId(GetEventInt(event, "userid"));
+
+	if(!IsValidClient(client) || !IsPlayerAlive(client)) {
+		return Plugin_Continue;
+	}
+
+	SetEntPropFloat(client, Prop_Send, "m_flFlashMaxAlpha", 0.5);
 	return Plugin_Continue;
 }
 
@@ -306,6 +359,20 @@ public Action SmiercGracza(Handle event, char[] name, bool dontBroadcast) {
 	if(umiejetnosc[client][odrodzenie]) {
 		if(GetRandomInt(1, umiejetnosc[client][odrodzenie]) == 1)
 			CreateTimer(0.1, Wskrzeszenie, client, TIMER_FLAG_NO_MAPCHANGE);
+	}
+
+	return Plugin_Continue;
+}
+
+public Action NieskonczonyMagazynek(Handle event, char[] name, bool dontbroadcast) {
+	new client = GetClientOfUserId(GetEventInt(event, "userid"));
+	if(!IsValidClient(client) || !IsPlayerAlive(client))
+		return Plugin_Continue;
+
+	if(umiejetnosc[client][nieskonczony_magazynek]){
+		new active_weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+		if(active_weapon != -1)
+			SetEntData(active_weapon, FindSendPropInfo("CWeaponCSBase", "m_iClip1"), 5);
 	}
 
 	return Plugin_Continue;
@@ -484,14 +551,14 @@ void Trucizna(int client, int attacker, int poisons, float time, float damage, f
 		if(entity >= 0)
 			glowID[client] = EntIndexToEntRef(entity);
 
-		zatrucie[client] = CreateDataTimer(time, czas_Zatrucia, dataPack, TIMER_REPEAT);
+		zatrucie[client] = CreateDataTimer(time, czas_zatrucia, dataPack, TIMER_REPEAT);
 		WritePackCell(dataPack, attacker);
 		WritePackCell(dataPack, client);
 		WritePackCell(dataPack, view_as<int>(damage));
 		WritePackCell(dataPack, view_as<int>(damagePerInt));
 	}
 }
-public Action czas_Zatrucia(Handle hTimer, DataPack dataPack) {
+public Action czas_zatrucia(Handle hTimer, DataPack dataPack) {
 	ResetPack(dataPack);
 	int attacker = ReadPackCell(dataPack);
 	int client = ReadPackCell(dataPack);
@@ -505,7 +572,7 @@ public Action czas_Zatrucia(Handle hTimer, DataPack dataPack) {
 		return Plugin_Stop;
 	}
 
-	SDKHooks_TakeDamage(attacker, attacker, client, fDamage, DMG_POISON, -1);
+	SDKHooks_TakeDamage(client, attacker, attacker, fDamage, DMG_POISON, -1);
 
 	if(!(--zatruty[client])) {
 		RemoveGlow(EntRefToEntIndex(glowID[client]));
@@ -607,6 +674,17 @@ public Action Wskrzeszenie(Handle timer, any client) {
 
 	CS_RespawnPlayer(client);
 	return Plugin_Continue;
+}
+
+void Fade(client, duration, hold_time, flags, const colors[4]) {
+	Handle message = StartMessageOne("Fade", client, 1);
+
+	PbSetInt(message, "duration", duration);
+	PbSetInt(message, "hold_time", hold_time);
+	PbSetInt(message, "flags", flags);
+	PbSetColor(message, "clr", colors);
+
+	EndMessage();
 }
 
 int UstawSkill(int client, int parametr, int wartosc) {

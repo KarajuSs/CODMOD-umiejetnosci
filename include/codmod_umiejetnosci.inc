@@ -9,7 +9,7 @@
 #define EF_NOSHADOW				 	(1 << 4)
 #define EF_NORECEIVESHADOW		  	(1 << 6)
 
-#define MAX_SKILLI 23
+#define MAX_SKILLI 26
 enum {
 	zeruj=0,
 	autobh, ciche_kroki,
@@ -19,7 +19,8 @@ enum {
 	niewidka, niewidka_noz, niewidka_kucanie, niewidka_kucanie_noz,
 	szansa_z_broni, hp_za_killa, pelen_magazynek_za_killa, szansa_z_noza,
 	wieksze_obrazenia_z_broni, wieksze_obrazenia_z_broni_z_int,
-	podpalenie, zamrozenie, trujace_dymne, trujace_pociski
+	podpalenie, zamrozenie, trujace_dymne, trujace_pociski, szybkostrzelnosc,
+	oslepienie, nieskonczony_magazynek
 }
 
 native cod_set_skill(client, parametr, wartosc);
