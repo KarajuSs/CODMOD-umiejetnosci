@@ -24,6 +24,8 @@ float wieksze_obrazenia[MAXPLAYERS+1][MAX_WEAPONS+1],
 Handle odmrozenie[MAXPLAYERS+1],
 	zatrucie[MAXPLAYERS+1];
 
+CSWeaponID csWeaponID;
+
 public Plugin:myinfo = {
 	name = PLUGIN_NAME,
 	author = PLUGIN_AUTHOR,
@@ -224,6 +226,17 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 		}
 	}
 
+	if(umiejetnosc[client][szybkostrzelnosc]) {
+		new active_weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+		if((buttons & IN_ATTACK) && !(csWeaponID == CSWeapon_KNIFE)) {
+			if(active_weapon != -1) {
+				float gametime = GetGameTime();
+				float fattack = GetEntDataFloat(active_weapon, FindSendPropInfo("CBaseCombatWeapon", "m_flNextPrimaryAttack"))-gametime;
+				SetEntDataFloat(active_weapon, FindSendPropInfo("CBaseCombatWeapon", "m_flNextPrimaryAttack"), (fattack/1.4)+gametime);
+			}
+		}
+	}
+
 	return Plugin_Continue;
 }
 
@@ -233,7 +246,6 @@ public Action OnTakeDamage(int client, int &attacker, int &inflictor, float &dam
 
 	int weapon;
 	int weaponID;
-	CSWeaponID csWeaponID;
 
 	if(weapon == -1) {
 		if(inflictor > MAXPLAYERS) {
@@ -292,17 +304,6 @@ public Action OnTakeDamage(int client, int &attacker, int &inflictor, float &dam
 			Trucizna(client, attacker, 16, 0.1, 1.0, 0.025);
 	}
 
-	if(umiejetnosc[attacker][szybkostrzelnosc]) {
-		new active_weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
-		if(!(csWeaponID == CSWeapon_KNIFE)) {
-			if(active_weapon != -1) {
-				float gametime = GetGameTime();
-				float fattack = GetEntDataFloat(active_weapon, FindSendPropInfo("CBaseCombatWeapon", "m_flNextPrimaryAttack"))-gametime;
-				SetEntDataFloat(active_weapon, FindSendPropInfo("CBaseCombatWeapon", "m_flNextPrimaryAttack"), (fattack/1.4)+gametime);
-			}
-		}
-	}
-
 	if(umiejetnosc[attacker][oslepienie]) {
 		if((damageType & DMG_BULLET) && GetRandomInt(1,umiejetnosc[attacker][oslepienie]) == 1) {
 			Fade(client, 750, 300, 0x0001, {255, 255, 255, 255});
@@ -332,8 +333,7 @@ public Action SmiercGracza(Handle event, char[] name, bool dontBroadcast) {
 
 	if(umiejetnosc[client][pelen_magazynek_za_killa]) {
 		new active_weapon = GetEntPropEnt(killer, Prop_Send, "m_hActiveWeapon");
-		if(active_weapon != -1)
-		{
+		if(active_weapon != -1) {
 			char weapon[32];
 			GetClientWeapon(killer, weapon, sizeof(weapon));
 			for(int i = 0; i < sizeof(nazwy_broni); i ++) {
