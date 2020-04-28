@@ -153,12 +153,11 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 			|| GetEntityMoveType(client) & MOVETYPE_LADDER) {
 		return Plugin_Continue;
 	}
+	new flags = GetEntityFlags(client);
 
 	if(umiejetnosc[client][multi_skok]) {
 		static lastButtons[MAXPLAYERS+1];
 		static jumps[MAXPLAYERS+1];
-
-		new flags = GetEntityFlags(client);
 
 		GetClientEyeAngles(client, angles);
 
@@ -178,22 +177,20 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 	
 	if(umiejetnosc[client][dlugi_skok]) {
 		float gametime = GetGameTime();
-		if((buttons & IN_USE)) {
-			if(gametime > time_gracza[client]+4.0) {
-				int moc = umiejetnosc[client][dlugi_skok]+RoundFloat(cod_get_user_maks_intelligence(client)*4.0);
-				GetClientEyeAngles(client, angles);
+		if((buttons & IN_DUCK) && (buttons & IN_JUMP) && (flags & FL_ONGROUND) && (gametime > time_gracza[client]+4.0)) {
+			int moc = umiejetnosc[client][dlugi_skok]+RoundFloat(cod_get_user_maks_intelligence(client)*4.0);
+			GetClientEyeAngles(client, angles);
 
-				angles[0] *= -1.0; 
-				angles[0] = DegToRad(angles[0]); 
-				angles[1] = DegToRad(angles[1]); 
+			angles[0] *= -1.0; 
+			angles[0] = DegToRad(angles[0]); 
+			angles[1] = DegToRad(angles[1]); 
 
-				vel[0] = Cosine(angles[0]) * Cosine(angles[1]) * moc;
-				vel[1] = Cosine(angles[0]) * Sine(angles[1]) * moc;
-				vel[2] = 265.0;
+			vel[0] = Cosine(angles[0]) * Cosine(angles[1]) * moc;
+			vel[1] = Cosine(angles[0]) * Sine(angles[1]) * moc;
+			vel[2] = 265.0;
 
-				TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, vel);
-				time_gracza[client] = gametime;
-			}
+			TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, vel);
+			time_gracza[client] = gametime;
 		}
 	}
 
@@ -488,7 +485,7 @@ public void Think_Post(int client) {
 		if(!IsValidEdict(weapon) || weapon == -1) {
 			return;
 		}
-		float punchAngle[3]
+		float punchAngle[3];
 
 		if(umiejetnosc[client][brak_rozrzutu_broni]) {
 			float multiplier = 0.0;
